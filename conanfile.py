@@ -31,7 +31,7 @@ class QtConan(ConanFile):
     """ Qt Conan package """
 
     name = "Qt"
-    version = "5.6.2"
+    version = "5.6.1-adsk"
     description = "Conan.io package for Qt library."
     sourceDir = "qt5"
     settings = "os", "arch", "compiler", "build_type"
@@ -42,7 +42,7 @@ class QtConan(ConanFile):
         "xmlpatterns": [True, False]
     }
     default_options = "shared=True", "opengl=desktop", "websockets=False", "xmlpatterns=False"
-    url = "http://github.com/osechet/conan-qt"
+    url = "http://github.com/boberfly/conan-qt"
     license = "http://doc.qt.io/qt-5/lgpl.html"
     short_paths = True
 
@@ -76,8 +76,9 @@ class QtConan(ConanFile):
         if self.options.xmlpatterns:
             submodules.append("qtxmlpatterns")
 
-        major = ".".join(self.version.split(".")[:2])
-        self.run("git clone https://code.qt.io/qt/qt5.git")
+        #major = ".".join(self.version.split(".")[:2])
+        major = "adsk-contrib/vfx/5.6.1"
+        self.run("git clone https://github.com/autodesk-forks/qtbase.git")
         self.run("cd %s && git checkout %s" % (self.sourceDir, major))
         self.run("cd %s && perl init-repository --no-update --module-subset=%s"
                  % (self.sourceDir, ",".join(submodules)))
