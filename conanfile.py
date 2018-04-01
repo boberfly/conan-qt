@@ -1,6 +1,6 @@
 
 import os
-from conans import ConanFile, ConfigureEnvironment
+from conans import ConanFile, tools #, ConfigureEnvironment
 from conans.tools import cpu_count, vcvars_command, os_info, SystemPackageTool
 from distutils.spawn import find_executable
 
@@ -33,7 +33,7 @@ class QtConan(ConanFile):
     name = "Qt"
     version = "5.6.1-adsk"
     description = "Conan.io package for Qt library."
-    sourceDir = "qt5"
+    sourceDir = "qt-adsk-5.6.1"
     settings = "os", "arch", "compiler", "build_type"
     options = {
         "shared": [True, False],
@@ -45,6 +45,7 @@ class QtConan(ConanFile):
     url = "http://github.com/boberfly/conan-qt"
     license = "http://doc.qt.io/qt-5/lgpl.html"
     short_paths = True
+    requires = "OpenSSL/1.0.2n@conan/stable"
 
     def system_requirements(self):
         pack_names = None
@@ -70,37 +71,39 @@ class QtConan(ConanFile):
             installer.install(" ".join(pack_names)) # Install the package
 
     def source(self):
-        submodules = ["qtbase"]
-        if self.options.websockets:
-            submodules.append("qtwebsockets")
-        if self.options.xmlpatterns:
-            submodules.append("qtxmlpatterns")
-
-        #major = ".".join(self.version.split(".")[:2])
-        major = "adsk-contrib/vfx/5.6.1"
-        self.run("git clone https://github.com/autodesk-forks/qtbase.git")
-        self.run("cd %s && git checkout %s" % (self.sourceDir, major))
-        self.run("cd %s && perl init-repository --no-update --module-subset=%s"
-                 % (self.sourceDir, ",".join(submodules)))
-        self.run("cd %s && git checkout v%s && git submodule update"
-                 % (self.sourceDir, self.version))
-
-        if self.settings.os != "Windows":
-            self.run("chmod +x ./%s/configure" % self.sourceDir)
-        else:
-            # Fix issue with sh.exe and cmake on Windows
-            # This solution isn't good at all but I cannot find anything else
-            sh_path = which("sh.exe")
-            if sh_path:
-                fpath, _ = os.path.split(sh_path)
-                self.run("ren \"%s\" _sh.exe" % os.path.join(fpath, "sh.exe"))
+        tools.get("https://www.autodesk.com/content/dam/autodesk/www/Company/files/Qt561ForMaya2018Update1.zip")
+        tools.untargz("5.6.1-Maya/qt-adsk-5.6.1.tgz")
 
     def build(self):
         """ Define your project building. You decide the way of building it
             to reuse it later in any other project.
         """
-        args = ["-opensource", "-confirm-license", "-nomake examples", "-nomake tests",
-                "-prefix %s" % self.package_folder]
+        openssl_dir = self.deps_cpp_info["OpenSSL"].rootpath
+        openssl_include = "%s/include" % openssl_dir
+        openssl_lib = "%s/lib" % openssl_dir
+
+        args = ["-prefix %s" % self.package_folder,
+                "-plugindir %s/qt/plugins" % self.package_folder,
+                "-opensource",
+                "-confirm-license",
+                "-no-rpath",
+                "-no-gtkstyle",
+                "-no-audio-backend",
+                "-no-dbus",
+                "-skip qtconnectivity",
+                "-skip qtwebengine",
+                "-skip qt3d",
+                "-skip qtdeclarative",
+                "-no-libudev",
+                "-no-icu",
+                "-qt-pcre",
+                "-nomake examples",
+                "-nomake tests",
+                "-opengl desktop",
+                #"-openssl",
+                "-I %s" % openssl_include,
+                "-L %s" % openssl_lib,
+                "-no-warnings-are-errors"]
         if not self.options.shared:
             args.insert(0, "-static")
         if self.settings.build_type == "Debug":
@@ -128,7 +131,7 @@ class QtConan(ConanFile):
         vcvars = vcvars_command(self.settings)
         vcvars = vcvars + " && " if vcvars else ""
         set_env = 'SET PATH={dir}/qtbase/bin;{dir}/gnuwin32/bin;%PATH%'.format(dir=self.conanfile_directory)
-        args += ["-opengl %s" % self.options.opengl]
+        args += ["-no-angle"]
         # it seems not enough to set the vcvars for older versions, it works fine
         # with MSVC2015 without -platform
         if self.settings.compiler == "Visual Studio":
@@ -158,23 +161,23 @@ class QtConan(ConanFile):
 
     def _build_unix(self, args):
         if self.settings.os == "Linux":
-            args += ["-silent", "-xcb"]
+            args += ["-qt-xcb"]
             if self.settings.arch == "x86":
                 args += ["-platform linux-g++-32"]
         else:
-            args += ["-silent", "-no-framework"]
+            args += ["-silent", "-no-framework", "-no-freetype"]
             if self.settings.arch == "x86":
                 args += ["-platform macx-clang-32"]
 
         self.output.info("Using '%s' threads" % str(cpu_count()))
-        self.run("cd %s && ./configure %s" % (self.sourceDir, " ".join(args)))
-        self.run("cd %s && make -j %s" % (self.sourceDir, str(cpu_count())))
-        self.run("cd %s && make install" % (self.sourceDir))
+        self.run("cd %s/%s && ./configure %s" % (self.source_folder, self.sourceDir, " ".join(args)))
+        self.run("cd %s/%s && make -j %s" % (self.source_folder, self.sourceDir, str(cpu_count())))
+        self.run("cd %s/%s && make install" % (self.source_folder, self.sourceDir))
 
     def package_info(self):
-        libs = ['Concurrent', 'Core', 'DBus',
+        libs = ['Concurrent', 'Core',
                 'Gui', 'Network', 'OpenGL',
-                'Sql', 'Test', 'Widgets', 'Xml']
+                'Widgets', 'Xml']
 
         self.cpp_info.libs = []
         self.cpp_info.includedirs = ["include"]
